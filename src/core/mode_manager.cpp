@@ -11,6 +11,7 @@
 #include "src/screens/screen_debug.h"
 #include "src/screens/screen_obd.h"
 #include "src/screens/screen_wifi.h"
+#include "src/screens/screen_settings.h"
 
 #define TOUCH_GRACE_MS 250
 
@@ -23,6 +24,7 @@ static const Screen screens[SCREEN_COUNT] = {
   { "debug",    debug_begin,    debug_loop,    debug_end,    debug_draw,    debug_hover,    debug_release    },
   { "obd",      obd_begin,      obd_loop,      obd_end,      obd_draw,      obd_hover,      obd_release      },
   { "wifi",     wifi_begin,     wifi_loop,     wifi_end,     wifi_draw,     wifi_hover,     wifi_release     },
+  { "settings", settings_begin, settings_loop, settings_end, settings_draw, settings_hover, settings_release },
 };
 
 static ScreenId atual = SCREEN_LOADING;

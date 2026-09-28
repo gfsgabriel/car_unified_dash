@@ -12,6 +12,7 @@ enum ScreenId : uint8_t {
   SCREEN_DEBUG,
   SCREEN_OBD,
   SCREEN_WIFI,
+  SCREEN_SETTINGS,
   SCREEN_COUNT
 };
 

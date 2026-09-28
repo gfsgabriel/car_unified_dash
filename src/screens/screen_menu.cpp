@@ -11,6 +11,12 @@
 #define MENU_GAP_Y     12
 #define MENU_Y0        50
 
+#define GEAR_BTN_SIZE 36
+#define GEAR_BTN_X (SCR_W - GEAR_BTN_SIZE - 8)
+#define GEAR_BTN_Y 6
+
+static bool hoverGear = false;
+
 static int hoverIdx = -1;
 
 struct MenuItem {
@@ -51,6 +57,21 @@ void menu_begin() { hoverIdx = -1; }
 void menu_loop(uint32_t now) {}
 void menu_end() {}
 
+static void drawGearIcon(int cx, int cy, int r, uint16_t color) {
+  canvas.drawCircle(cx, cy, r, color);
+  canvas.drawCircle(cx, cy, r - 1, color);
+  canvas.fillCircle(cx, cy, r / 3, color);
+  for (int i = 0; i < 6; i++) {
+    float a = i * 60.0f * DEG_TO_RAD;
+    int x1 = cx + cosf(a) * (r + 1);
+    int y1 = cy + sinf(a) * (r + 1);
+    int x2 = cx + cosf(a) * (r + 5);
+    int y2 = cy + sinf(a) * (r + 5);
+    canvas.drawLine(x1, y1, x2, y2, color);
+    canvas.drawLine(x1+1, y1, x2+1, y2, color);
+  }
+}
+
 void menu_draw() {
   canvas.setTextDatum(TC_DATUM);
   canvas.setTextColor(TFT_CYAN);
@@ -70,12 +91,29 @@ void menu_draw() {
     canvas.setTextDatum(MC_DATUM);
     canvas.drawString(itens[i].label, ix + MENU_BTN_W / 2, iy + MENU_BTN_H / 2);
   }
+
+  // Ícone de engrenagem (settings)
+  uint16_t gearBg = hoverGear ? 0x049F : 0x18E3;
+  canvas.fillRect(GEAR_BTN_X, GEAR_BTN_Y, GEAR_BTN_SIZE, GEAR_BTN_SIZE, gearBg);
+  canvas.drawRect(GEAR_BTN_X, GEAR_BTN_Y, GEAR_BTN_SIZE, GEAR_BTN_SIZE, TFT_WHITE);
+  drawGearIcon(GEAR_BTN_X + GEAR_BTN_SIZE/2, GEAR_BTN_Y + GEAR_BTN_SIZE/2, 8, TFT_WHITE);
+
   canvas.setTextDatum(TL_DATUM);
 }
 
-void menu_hover(int x, int y) { hoverIdx = hitTest(x, y); }
+static bool gearHit(int x, int y) {
+  return x >= GEAR_BTN_X && x <= GEAR_BTN_X + GEAR_BTN_SIZE &&
+         y >= GEAR_BTN_Y && y <= GEAR_BTN_Y + GEAR_BTN_SIZE;
+}
+
+void menu_hover(int x, int y) {
+  if (gearHit(x, y)) { hoverGear = true; hoverIdx = -1; return; }
+  hoverGear = false;
+  hoverIdx = hitTest(x, y);
+}
 
 void menu_release(int x, int y) {
+  if (gearHit(x, y)) { mode_set(SCREEN_SETTINGS); return; }
   int idx = hitTest(x, y);
   if (idx >= 0) mode_set(itens[idx].destino);
 }

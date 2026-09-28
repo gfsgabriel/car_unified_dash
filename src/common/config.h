@@ -5,7 +5,7 @@
 
 #define SCR_W_DEFAULT       480
 #define SCR_H_DEFAULT       320
-#define BAND_HEIGHT         40
+#define BAND_HEIGHT         8
 #define RENDER_PERIOD_MS    33
 
 #define DEBOUNCE_RELEASE_MS 50

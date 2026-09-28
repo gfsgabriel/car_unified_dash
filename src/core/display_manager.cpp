@@ -36,7 +36,12 @@ static void TaskFlush(void*) {
   const TickType_t period = pdMS_TO_TICKS(RENDER_PERIOD_MS);
   const int numFaixas = SCR_H / BAND_HEIGHT;
 
+  uint32_t frameCount = 0;
+  uint32_t lastFpsCalc = 0;
+
   for (;;) {
+    uint32_t t0 = micros();
+
     if (xSemaphoreTake(xCanvasMutex, portMAX_DELAY) == pdTRUE) {
       uint16_t* base = (uint16_t*)canvas.getPointer();
       for (int i = 0; i < numFaixas; i++) {
@@ -45,6 +50,21 @@ static void TaskFlush(void*) {
       }
       xSemaphoreGive(xCanvasMutex);
     }
+
+    // ★ Tempo de flush (gargalo SPI)
+    gEstado.tempoFlushMs = (micros() - t0) / 1000;
+
+    // ★ FPS = taxa real de flushes
+    frameCount++;
+    uint32_t agora = millis();
+    if (lastFpsCalc == 0) {
+      lastFpsCalc = agora;
+    } else if (agora - lastFpsCalc >= 1000) {
+      gEstado.fpsRender = frameCount * 1000.0f / (agora - lastFpsCalc);
+      frameCount = 0;
+      lastFpsCalc = agora;
+    }
+
     vTaskDelayUntil(&lastWake, period);
   }
 }

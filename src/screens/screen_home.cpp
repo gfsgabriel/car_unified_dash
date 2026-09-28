@@ -9,6 +9,8 @@
 #include "src/common/estado.h"
 #include "src/widgets/widgets_gauge.h"
 #include "src/widgets/widgets_fft.h"
+#include "src/common/dash_cfg.h"
+
 
 static uint32_t tInicio = 0;
 static bool     backgroundsProntos = false;
@@ -30,6 +32,7 @@ static float consPrev   = 0.0f,   consTarget   = 0.0f;
 static float tpsPrev    = 0.0f,   tpsTarget    = 0.0f;
 static float pedalPrev  = 0.0f,   pedalTarget  = 0.0f;
 static unsigned long tInicioAnim = 0;
+static unsigned long tUltimoFrame = 0;   // ★ restaurado
 
 // ★ Máximo de consumo local (só nesta tela, reseta ao entrar)
 static float consumoMaxShown = 0.0f;
@@ -56,6 +59,9 @@ static uint16_t corPonteiroConsumo(float v) {
 
 // ===============================================================
 // Animação
+//   - Se período <= render: pula direto (admin/mock)
+//   - Senão: interpola prev→target, adiantando um frame na janela
+//     pra mover JÁ no frame atual
 // ===============================================================
 static void atualizarAnimacoes() {
   unsigned long agora = millis();
@@ -73,8 +79,16 @@ static void atualizarAnimacoes() {
     consShown  = consPrev  = consTarget  = gTelemetria.consumo_ml_min;
     tpsShown   = tpsPrev   = tpsTarget   = gTelemetria.tps;
     pedalShown = pedalPrev = pedalTarget = gTelemetria.pedal;
+    tUltimoFrame = agora;   // ★ restaurado
     return;
   }
+
+  // ★ Intervalo real desde o último frame
+  unsigned long intervaloFrame = (tUltimoFrame > 0)
+    ? (agora - tUltimoFrame)
+    : (unsigned long)RENDER_PERIOD_MS;
+  if (intervaloFrame > 200) intervaloFrame = (unsigned long)RENDER_PERIOD_MS;
+  tUltimoFrame = agora;
 
   if (agora - tInicioAnim >= (unsigned long)periodo) {
     rpmPrev   = rpmShown;   rpmTarget   = gTelemetria.rpm;
@@ -82,7 +96,9 @@ static void atualizarAnimacoes() {
     consPrev  = consShown;  consTarget  = gTelemetria.consumo_ml_min;
     tpsPrev   = tpsShown;   tpsTarget   = gTelemetria.tps;
     pedalPrev = pedalShown; pedalTarget = gTelemetria.pedal;
-    tInicioAnim = agora;
+
+    // ★ Adianta 1 frame pra mover NESTE frame
+    tInicioAnim = agora - intervaloFrame;
   }
 
   float t = (agora - tInicioAnim) / periodo;
@@ -157,10 +173,6 @@ static void desenharBarraPedal(TFT_eSprite& c, int x, int y,
 // Barra RPM
 // ===============================================================
 static void desenharBarraRPMAnaDigi(TFT_eSprite& c, float rpmAtual) {
-  const float rpmMin = 0.0f;
-  const float redlineStart = 6500.0f;
-  const float rpmMax = 8000.0f;
-
   const int barraLarguraBloco = 4;
   const int barraLarguraEspaco = 1;
   const int alturaBarraRPM = 32;
@@ -171,20 +183,45 @@ static void desenharBarraRPMAnaDigi(TFT_eSprite& c, float rpmAtual) {
   const int corteRpmDigitalLarg = 85;
 
   int cicloTotal = barraLarguraBloco + barraLarguraEspaco;
-  int limitePixels = (int)((rpmAtual - rpmMin) * 320.0f / (rpmMax - rpmMin));
+  int limitePixels = (int)(rpmAtual * 320.0f / gDashCfg.rpmMax);
   if (limitePixels < 0) limitePixels = 0;
   if (limitePixels > 320) limitePixels = 320;
 
+  int pxOrange  = (int)(gDashCfg.rpmOrange  * 320.0f / gDashCfg.rpmMax);
+  int pxRedline = (int)(gDashCfg.rpmRedline * 320.0f / gDashCfg.rpmMax);
+
+  uint16_t cBase = dashRGB565(gDashCfg.baseR, gDashCfg.baseG, gDashCfg.baseB);
+  uint16_t cMid  = dashRGB565(gDashCfg.midR,  gDashCfg.midG,  gDashCfg.midB);
+  uint16_t cRed  = dashRGB565(gDashCfg.redR,  gDashCfg.redG,  gDashCfg.redB);
+
+  int zone = 0;
+  if (rpmAtual >= gDashCfg.rpmRedline)      zone = 2;
+  else if (rpmAtual >= gDashCfg.rpmOrange)  zone = 1;
+
   for (int x = 0; x < 320; x++) {
     if ((x % cicloTotal) >= barraLarguraBloco) continue;
-    if (x <= limitePixels) {
-      float rpmNestePixel = rpmMin + (x * (rpmMax - rpmMin) / 320.0f);
-      c.drawFastVLine(x, 0, alturaBarraRPM,
-                      (rpmNestePixel < redlineStart) ? TFT_GREEN : TFT_RED);
+
+    uint16_t color;
+    if (x > limitePixels) {
+      color = 0x39E7;   // cinza (não preenchido)
+    } else if (zone == 0) {
+      color = cBase;
+    } else if (zone == 1) {
+      color = gDashCfg.midFull ? cMid
+                               : ((x < pxOrange) ? cBase : cMid);
     } else {
-      c.drawFastVLine(x, 0, alturaBarraRPM, 0x39E7);
+      if (gDashCfg.redlineFull) {
+        color = cRed;
+      } else if (gDashCfg.midFull) {
+        color = (x < pxRedline) ? cMid : cRed;
+      } else {
+        color = (x < pxOrange)  ? cBase :
+                ((x < pxRedline) ? cMid  : cRed);
+      }
     }
+    c.drawFastVLine(x, 0, alturaBarraRPM, color);
   }
+
   int alturaDoCorte = alturaBarraRPM - inicioCorteY;
   c.fillRect(corteVelocidadeX, inicioCorteY, corteVelocidadeLarg, alturaDoCorte, TFT_BLACK);
   c.fillRect(corteRpmDigitalX,  inicioCorteY, corteRpmDigitalLarg,  alturaDoCorte, TFT_BLACK);
@@ -383,9 +420,10 @@ static void drawColunaDireita() {
   canvas.setTextDatum(TL_DATUM);
 
   canvas.setTextColor(TFT_GREEN);
-  canvas.drawString(String("FPS:") + String((int)gEstado.fpsRender) +
-                    " Drw:" + String(gEstado.tempoDrawMs) + "ms",
-                    x0 + 4, 3);
+  canvas.drawString(String("F:") + String((int)gEstado.fpsRender) +
+                  " D:" + String(gEstado.tempoDrawMs) +
+                  " Fl:" + String(gEstado.tempoFlushMs) + "ms",
+                  x0 + 4, 3);
 
   canvas.setTextColor(TFT_CYAN);
   canvas.drawString(String("OBD:") + String((int)gTelemetria.taxaOBD) +
@@ -449,7 +487,8 @@ static void drawColunaDireita() {
 void home_begin() {
   tInicio = millis();
   tInicioAnim = millis();
-  consumoMaxShown = 0.0f;   // ★ reseta max local
+  tUltimoFrame = 0;         // ★ restaurado
+  consumoMaxShown = 0.0f;
   hoverBtnMedia = -1;
   hoverHamburger = false;
 

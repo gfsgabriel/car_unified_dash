@@ -8,6 +8,7 @@
 #include "src/core/touch_manager.h"
 #include "src/core/mode_manager.h"
 #include "src/core/uart_router.h"
+#include "src/common/dash_cfg.h"
 
 #include "src/sources/mock.h"
 
@@ -21,8 +22,12 @@ void setup() {
 
   telemetria_init();
   audio_init();
+
   estado_init();
   boot_log_add(LogTipo::OK, "Structs inicializadas");
+
+  dashConfigInit();
+  boot_log_add(LogTipo::OK, "Dash config carregado");
 
   display_init();
   boot_log_add(LogTipo::OK, "Display ST77922 %dx%d", SCR_W, SCR_H);
